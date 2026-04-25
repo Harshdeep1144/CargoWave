@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resilient Logistics Control Tower | Smart Supply Chain</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #map { height: 450px; width: 100%; border-radius: 0.75rem; z-index: 10; }
+        .external-map-container { height: 350px; width: 100%; border-radius: 0.75rem; overflow: hidden; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 0.5);
+        }
+        .status-dot { transition: all 0.3s ease; }
+        .btn-primary {
+            background: #2563eb;
+            transition: all 0.2s ease;
+        }
+        .btn-primary:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+        .connection-card {
+            border-left-width: 4px;
+        }
+    </style>
+</head>
+<body class="bg-[#f8fafc] min-h-screen text-slate-900">
+
+    <!-- Top Navigation Bar -->
+    <nav class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 p-2 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-none">SmartSupply AI</h1>
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Resilient Maritime Logistics</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div id="connection-badge" class="flex items-center bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                <span class="h-2 w-2 rounded-full bg-red-500 mr-2" id="global-status-dot"></span>
+                <span class="text-xs font-medium text-slate-300" id="global-status-text">Brain: Offline</span>
+            </div>
+            <div class="h-8 w-8 rounded-full bg-slate-700 overflow-hidden border border-slate-600">
+                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Harsh" alt="Avatar">
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Column: Operations & Mapping -->
+        <div class="lg:col-span-8 space-y-6">
+            
+            <!-- Map Visualization -->
+            <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-50 mb-2">
+                    <h2 class="text-sm font-semibold text-slate-700">Predictive Routing Matrix</h2>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">Live Simulation</span>
+                </div>
+                <div id="map"></div>
+            </div>
+
+            <!-- Global AIS Feed -->
+            <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-50 mb-2">
+                    <h2 class="text-sm font-semibold text-slate-700">AIS Traffic Surveillance</h2>
+                    <div class="flex space-x-2">
+                        <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Source: MarineTraffic</span>
+                    </div>
+                </div>
+                <div class="external-map-container">
+                    <iframe 
+                        name="marinetraffic" 
+                        id="marinetraffic" 
+                        width="100%" 
+                        height="350" 
+                        src="https://www.marinetraffic.com/en/ais/embed/zoom:4/centery:25/centerx:-12/maptype:4/shownames:false/mmsi:0/shipid:123065/fleet:/fleet_id:/vtypes:/show_menu:true/remember:false" 
+                        frameborder="0">
+                    </iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Controls & Analytics -->
+        <div class="lg:col-span-4 space-y-6">
+            
+            <!-- Voyage Controls -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-50 px-6 py-4 border-b border-slate-100">
+                    <h3 class="font-bold text-slate-800">Mission Control</h3>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="space-y-3">
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Target Port</label>
+                        <div class="grid grid-cols-1 gap-3">
+                            <button onclick="calculateRoute('Singapore')" class="btn-primary text-white py-3.5 px-4 rounded-xl flex items-center justify-between font-semibold group">
+                                <span>Port of Singapore</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 opacity-50 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </button>
+                            <button onclick="calculateRoute('Rotterdam')" class="bg-slate-100 text-slate-700 py-3.5 px-4 rounded-xl flex items-center justify-between font-semibold hover:bg-slate-200 transition">
+                                <span>Port of Rotterdam</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="border-slate-100">
+
+                    <!-- Real-time Status Card -->
+                    <div id="status-card" class="bg-slate-50 rounded-xl p-4 border border-slate-200 connection-card border-l-slate-300">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Current Status</p>
+                                <p id="status-text" class="font-bold text-slate-800 text-sm mt-1">System Standby</p>
+                                <p id="detail-text" class="text-xs text-slate-500 mt-0.5">Awaiting command inputs...</p>
+                            </div>
+                            <div id="status-icon-dot" class="h-3 w-3 rounded-full bg-slate-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Alert Notifications -->
+                    <div id="alert-box" class="hidden animate-in fade-in duration-500">
+                        <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl">
+                            <div class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <p class="text-amber-800 text-xs font-bold uppercase">Dynamic Reroute Triggered</p>
+                            </div>
+                            <p class="text-amber-700 text-xs mt-2" id="alert-msg">Hazard detected on primary lane. Optimization engine generating detour waypoints.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Optimization Stats -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h4 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Voyage Intelligence</h4>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-slate-600">Risk Assessment</span>
+                        <span class="text-xs font-bold text-green-600">Nominal</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-1.5">
+                        <div class="bg-green-500 h-1.5 rounded-full" style="width: 85%"></div>
+                    </div>
+                    <div class="flex justify-between items-center pt-2">
+                        <span class="text-xs text-slate-600">Fuel Efficiency</span>
+                        <span class="text-xs font-bold text-slate-800">94.2%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Server Configuration
+        const API_BASE_URL = "http://127.0.0.1:8000";
+
+        // Leaflet Map Initialization
+        let map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([15.0, 65.0], 3);
+        
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        let shipMarker = L.marker([14.5, 55.0]).addTo(map).bindPopup('<b>Vessel:</b> HarshDeep-01<br><b>Status:</b> Ready');
+        let currentPathLine;
+
+        // Health Check for the Python Server
+        async function checkServerHealth() {
+            try {
+                // Simple get check if server is up
+                const response = await fetch(`${API_BASE_URL}/docs`, { method: 'GET', mode: 'no-cors' });
+                document.getElementById('global-status-dot').className = "h-2 w-2 rounded-full bg-green-500";
+                document.getElementById('global-status-text').innerText = "Brain: Online";
+                return true;
+            } catch (e) {
+                document.getElementById('global-status-dot').className = "h-2 w-2 rounded-full bg-red-500";
+                document.getElementById('global-status-text').innerText = "Brain: Offline";
+                return false;
+            }
+        }
+
+        // Run health check on load
+        setInterval(checkServerHealth, 5000);
+        checkServerHealth();
+
+        async function calculateRoute(destinationName) {
+            const startCoords = { lat: 14.5, lon: 55.0 };
+            const destCoords = destinationName === 'Singapore' ? { lat: 1.29, lon: 103.85 } : { lat: 51.92, lon: 4.47 };
+
+            const statusText = document.getElementById('status-text');
+            const detailText = document.getElementById('detail-text');
+            const statusCard = document.getElementById('status-card');
+            const statusIcon = document.getElementById('status-icon-dot');
+
+            // Reset UI for calculation
+            statusText.innerText = "Analyzing Corridor...";
+            detailText.innerText = `Calculating optimal sea route to ${destinationName}`;
+            statusIcon.className = "h-3 w-3 rounded-full bg-blue-500 animate-ping";
+            statusCard.className = "bg-blue-50 rounded-xl p-4 border border-blue-100 connection-card border-l-blue-500";
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/calculate-route`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source: startCoords, destination: destCoords })
+                });
+
+                if (!response.ok) throw new Error('API Error');
+                
+                const data = await response.json();
+                updateUI(data, destinationName);
+            } catch (error) {
+                console.error('Connection failure:', error);
+                statusText.innerText = "Connection Failed";
+                detailText.innerText = "Server unreachable. Ensure main.py is running in VS Code.";
+                statusIcon.className = "h-3 w-3 rounded-full bg-red-600";
+                statusCard.className = "bg-red-50 rounded-xl p-4 border border-red-100 connection-card border-l-red-500";
+            }
+        }
+
+        function updateUI(data, destinationName) {
+            const statusText = document.getElementById('status-text');
+            const detailText = document.getElementById('detail-text');
+            const statusCard = document.getElementById('status-card');
+            const statusIcon = document.getElementById('status-icon-dot');
+            const alertBox = document.getElementById('alert-box');
+
+            if (currentPathLine) map.removeLayer(currentPathLine);
+            
+            // Draw route on map
+            currentPathLine = L.polyline(data.path, {
+                color: data.status === "OPTIMIZED" ? '#f59e0b' : '#3b82f6', 
+                weight: 6,
+                opacity: 0.8,
+                dashArray: data.status === "OPTIMIZED" ? '12, 12' : null 
+            }).addTo(map);
+            
+            map.fitBounds(currentPathLine.getBounds(), { padding: [50, 50] });
+
+            if (data.status === "OPTIMIZED") {
+                statusText.innerText = "Route Optimized";
+                detailText.innerText = `Dynamic detour to avoid ${data.disruption}`;
+                statusIcon.className = "h-3 w-3 rounded-full bg-amber-500";
+                statusCard.className = "bg-amber-50 rounded-xl p-4 border border-amber-100 connection-card border-l-amber-500";
+                alertBox.classList.remove('hidden');
+                document.getElementById('alert-msg').innerText = `${data.disruption} detected. AI Engine has generated an evasive path through safe corridors.`;
+            } else {
+                statusText.innerText = "Clear Passage";
+                detailText.innerText = `Standard lane confirmed for ${destinationName}`;
+                statusIcon.className = "h-3 w-3 rounded-full bg-green-500";
+                statusCard.className = "bg-green-50 rounded-xl p-4 border border-green-100 connection-card border-l-green-500";
+                alertBox.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
