@@ -3,392 +3,507 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maritime Intelligence | Smart Supply Chain</title>
+    <title>CargoWave | Maritime Command & Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        brand: '#4f46e5',
+                        surface: '#020617',
+                        panel: '#0f172a',
+                        border: '#1e293b',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
-        #map { height: 650px; width: 100%; border-radius: 0.75rem; z-index: 10; background: #f1f5f9; }
-        .ui-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f8fafc; margin: 0; padding: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        #map { height: 100%; width: 100%; z-index: 1; background: #020617; }
+        
+        .leaflet-container { background: #020617 !important; outline: 0; }
+        .leaflet-popup-content-wrapper { background: #0f172a; color: #f8fafc; border: 1px solid #1e293b; border-radius: 8px; box-shadow: none; }
+        .leaflet-popup-tip { background: #0f172a; }
+        
+        .route-path { stroke-dasharray: 8; animation: dash 60s linear infinite; }
+        @keyframes dash { to { stroke-dashoffset: -1000; } }
+
+        .btn-primary { background-color: #4f46e5; transition: all 0.2s ease; }
+        .btn-primary:hover { background-color: #4338ca; }
+        
+        .panel-glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid #1e293b; }
+        .view-hidden { display: none !important; }
+        
+        .simulator-active { cursor: crosshair !important; }
+        
+        .loading-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 2000; background: rgba(2, 6, 23, 0.95); padding: 24px; border-radius: 16px;
+            border: 1px solid #1e293b; display: none; text-align: center; min-width: 200px;
         }
-        .layer-control {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
+
+        .ais-fallback {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; width: 100%; background: #020617; color: #94a3b8; padding: 20px; text-align: center;
         }
-        .suggestion-box {
-            position: absolute;
-            width: 100%;
-            max-height: 200px;
-            overflow-y: auto;
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 0.5rem;
-            z-index: 2000;
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-        }
-        .suggestion-item {
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 0.875rem;
-        }
-        .suggestion-item:hover {
-            background-color: #f8fafc;
-            color: #2563eb;
-        }
-        .btn-primary {
-            background: #2563eb;
-            transition: all 0.2s ease;
-        }
-        .btn-primary:hover {
-            background: #1d4ed8;
-            transform: translateY(-1px);
-        }
-        /* Custom scrollbar for suggestions */
-        .suggestion-box::-webkit-scrollbar { width: 6px; }
-        .suggestion-box::-webkit-scrollbar-track { background: #f1f5f9; }
-        .suggestion-box::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        /* Tab Transition Effect */
+        .tab-btn { position: relative; overflow: hidden; transition: all 0.3s ease; }
+        .tab-active { background-color: #4f46e5 !important; color: white !important; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2); }
     </style>
 </head>
-<body class="bg-[#f8fafc] text-slate-900">
+<body class="h-screen flex overflow-hidden">
 
-    <!-- Header -->
-    <nav class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-[1001]">
-        <div class="flex items-center space-x-4">
-            <div class="bg-blue-600 p-2 rounded-lg text-white shadow-md">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-            </div>
-            <div>
-                <h1 class="font-bold text-lg text-slate-800 tracking-tight">SmartSupply AI</h1>
-                <p class="text-[10px] text-slate-500 uppercase font-semibold tracking-widest leading-none mt-1">Maritime Logistics Brain</p>
-            </div>
+    <!-- Loading Screen -->
+    <div id="loading" class="loading-overlay flex flex-col items-center gap-4">
+        <i class="fa-solid fa-circle-notch animate-spin text-brand text-3xl"></i>
+        <div>
+            <span class="text-[11px] font-bold uppercase tracking-widest text-slate-200 block mb-1">Recalculating Sea Lanes</span>
+            <span class="text-[9px] text-slate-500 uppercase tracking-widest">Optimizing via A-Star Grid</span>
         </div>
-        <div class="flex items-center space-x-6">
-            <div id="connection-badge" class="flex items-center bg-slate-50 px-4 py-1.5 rounded-full border border-slate-200">
-                <span class="h-2 w-2 rounded-full bg-red-500 mr-2" id="global-status-dot"></span>
-                <span class="text-xs font-bold text-slate-600" id="global-status-text">OFFLINE</span>
-            </div>
-            <div class="flex items-center space-x-3 border-l border-slate-200 pl-6">
-                <div class="text-right hidden md:block">
-                    <p class="text-xs font-bold text-slate-800">Harsh Deep</p>
-                    <p class="text-[10px] text-slate-500">Logistics Manager</p>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="w-80 flex flex-col border-r border-border bg-panel relative z-[1001] shrink-0">
+        <div class="p-6 border-b border-border">
+            <div class="flex items-center gap-3 mb-1">
+                <div class="bg-brand w-8 h-8 rounded flex items-center justify-center">
+                    <i class="fa-solid fa-anchor text-white text-sm"></i>
                 </div>
-                <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs border border-blue-200">
-                    HD
-                </div>
+                <h1 class="text-lg font-bold tracking-tight">CargoWave</h1>
             </div>
+            <p class="text-[10px] text-slate-500 uppercase font-semibold tracking-[0.2em]">Harsh Deep's Maritime Command</p>
         </div>
-    </nav>
 
-    <main class="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1600px] mx-auto">
-        
-        <!-- Left: Operations Panel -->
-        <div class="lg:col-span-3 space-y-6">
-            <!-- Voyage Planner -->
-            <div class="ui-card p-5 rounded-xl">
-                <h3 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Voyage Planner</h3>
-                
-                <div class="space-y-4">
-                    <!-- Start Port -->
-                    <div class="relative">
-                        <label class="text-[11px] font-bold text-slate-500 uppercase block mb-1.5 ml-1">Origin Port</label>
-                        <div class="relative">
-                            <input type="text" id="start-input" placeholder="Search origin..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all">
-                            <div id="start-suggestions" class="suggestion-box hidden"></div>
-                        </div>
-                    </div>
-
-                    <!-- Destination Port -->
-                    <div class="relative">
-                        <label class="text-[11px] font-bold text-slate-500 uppercase block mb-1.5 ml-1">Destination Port</label>
-                        <div class="relative">
-                            <input type="text" id="dest-input" placeholder="Search destination..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all">
-                            <div id="dest-suggestions" class="suggestion-box hidden"></div>
-                        </div>
-                    </div>
-
-                    <button onclick="calculateRouteFromInputs()" class="btn-primary w-full text-white py-3 px-4 rounded-lg flex items-center justify-center font-bold text-sm shadow-sm">
-                        <span>Optimize Route</span>
-                        <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 7l5 5m0 0l-5 5m5-5H6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Real-time Metrics -->
-            <div class="ui-card p-5 rounded-xl">
-                <h3 class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Live Telemetry</h3>
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                        <span class="text-xs text-slate-500">Wave Height</span>
-                        <span id="tel-waves" class="text-sm font-bold text-blue-600">--</span>
-                    </div>
-                    <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                        <span class="text-xs text-slate-500">Wind Speed</span>
-                        <span id="tel-wind" class="text-sm font-bold text-slate-700">--</span>
-                    </div>
-                    <div class="flex justify-between items-center py-2">
-                        <span class="text-xs text-slate-500">Risk Profile</span>
-                        <span id="tel-risk" class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Nominal</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Mini AIS Tracker -->
-            <div class="ui-card rounded-xl overflow-hidden">
-                <div class="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <h3 class="text-xs font-bold text-slate-600 uppercase tracking-tighter">Live AIS Feed</h3>
-                </div>
-                <iframe 
-                    width="100%" 
-                    height="180" 
-                    src="https://www.marinetraffic.com/en/ais/embed/zoom:5/centery:15/centerx:70/maptype:4/shownames:false/mmsi:0/shipid:123065/fleet:/fleet_id:/vtypes:/show_menu:false" 
-                    frameborder="0">
-                </iframe>
+        <!-- View Switcher -->
+        <div class="p-4 border-b border-border bg-surface/30">
+            <div class="flex bg-surface rounded-lg p-1 border border-border relative">
+                <button onclick="setView('logistics')" id="btn-logistics" class="tab-btn flex-1 py-2 text-[10px] font-bold uppercase rounded text-white tab-active">
+                    Logistics
+                </button>
+                <button onclick="setView('ais')" id="btn-ais" class="tab-btn flex-1 py-2 text-[10px] font-bold uppercase rounded text-slate-500 hover:text-slate-300">
+                    Live AIS
+                </button>
             </div>
         </div>
 
-        <!-- Center: Interactive Map Visualization -->
-        <div class="lg:col-span-9 relative">
-            <div class="ui-card p-1 rounded-xl shadow-sm relative">
-                <div id="map"></div>
-                
-                <!-- Map Legend -->
-                <div class="absolute bottom-6 left-6 z-[1000] bg-white/90 backdrop-blur-md p-4 rounded-lg border border-slate-200 shadow-lg hidden md:block">
-                    <h4 class="text-[10px] font-black text-slate-400 uppercase mb-2">Map Legend</h4>
-                    <div class="space-y-2">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-3 h-3 rounded-full bg-blue-500"></div>
-                            <span class="text-xs font-medium text-slate-600">Standard Lane</span>
+        <!-- Controls Container -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+            <!-- Logistics Section -->
+            <div id="logistics-controls" class="space-y-6">
+                <section class="space-y-4">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Router</label>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-[11px] text-slate-500 mb-1.5 block font-medium">Origin Port</label>
+                            <select id="origin-select" class="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-xs font-medium text-slate-200 outline-none focus:border-brand appearance-none cursor-pointer"></select>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <div class="w-3 h-3 rounded-full bg-amber-500"></div>
-                            <span class="text-xs font-medium text-slate-600">AI Detour</span>
+                        <div>
+                            <label class="text-[11px] text-slate-500 mb-1.5 block font-medium">Destination Port</label>
+                            <select id="dest-select" class="w-full bg-surface border border-border rounded-lg px-3 py-2.5 text-xs font-medium text-slate-200 outline-none focus:border-brand appearance-none cursor-pointer"></select>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-                            <span class="text-xs font-medium text-slate-600">Wave Hazard</span>
+                    </div>
+                    <button id="calc-btn" class="w-full btn-primary text-white py-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-brand/10">
+                        <i class="fa-solid fa-rotate"></i> Sync & Route
+                    </button>
+                </section>
+
+                <section class="p-4 bg-slate-900/40 rounded-xl border border-border space-y-4">
+                    <div class="flex items-center justify-between">
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Simulator</label>
+                        <span id="sim-indicator" class="text-[9px] font-bold text-slate-600">IDLE</span>
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-500 mb-1.5 block font-medium">Obstacle Radius (NM)</label>
+                        <input id="sim-radius" type="number" value="400" min="50" max="1500" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-amber-500/50">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="toggleSimulationMode()" id="btn-sim" class="bg-surface border border-border hover:border-amber-500/50 text-slate-300 py-2.5 rounded-lg text-[10px] font-bold uppercase transition-all">
+                            <i class="fa-solid fa-plus text-amber-500 mr-1"></i> Add
+                        </button>
+                        <button onclick="clearDisruptions()" class="bg-surface border border-border hover:border-red-500/50 text-slate-300 py-2.5 rounded-lg text-[10px] font-bold uppercase transition-all">
+                            <i class="fa-solid fa-trash text-red-500 mr-1"></i> Clear
+                        </button>
+                    </div>
+                </section>
+
+                <div id="metrics-panel" class="hidden space-y-4">
+                    <div class="bg-surface/50 p-4 rounded-xl border border-border">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-[10px] font-bold text-slate-400 uppercase">Analysis</h3>
+                            <span class="text-[9px] text-brand font-bold">OPTIMIZED</span>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center text-[11px]">
+                                <span class="text-slate-500">Distance</span>
+                                <span id="metric-dist" class="font-mono font-bold text-slate-200">--</span>
+                            </div>
+                            <div class="flex justify-between items-center text-[11px]">
+                                <span class="text-slate-500">ETA (@22kts)</span>
+                                <span id="metric-time" class="font-mono font-bold text-slate-200">--</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Layer Toggles -->
-                <div class="layer-control flex flex-col space-y-2">
-                    <button onclick="toggleLayer('wind')" id="btn-wind" title="Wind Layer" class="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm transition">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                    <button onclick="toggleLayer('clouds')" id="btn-clouds" title="Cloud Layer" class="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm transition">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                </div>
             </div>
 
-            <!-- Dynamic Alert Overlay -->
-            <div id="alert-overlay" class="hidden absolute top-8 left-1/2 -translate-x-1/2 z-[2000]">
-                <div class="bg-amber-50 border border-amber-200 text-amber-800 px-6 py-2.5 rounded-full font-bold text-xs shadow-xl flex items-center space-x-3">
-                    <div class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></div>
-                    <span>Diverting from primary lane due to storm Alpha</span>
+            <!-- AIS Info Section (Shown when AIS is active) -->
+            <div id="ais-info" class="hidden space-y-4">
+                <div class="p-4 bg-brand/10 border border-brand/20 rounded-xl">
+                    <h3 class="text-[10px] font-bold text-brand uppercase mb-2">Live AIS Stream</h3>
+                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                        Connecting to global satellite AIS network. Data includes vessel position, speed, and heading for all commercial traffic.
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-surface p-3 border border-border rounded-lg">
+                        <span class="block text-[9px] text-slate-500 uppercase">Active Ships</span>
+                        <span class="text-sm font-mono font-bold">142,502</span>
+                    </div>
+                    <div class="bg-surface p-3 border border-border rounded-lg">
+                        <span class="block text-[9px] text-slate-500 uppercase">Latency</span>
+                        <span class="text-sm font-mono font-bold text-emerald-500">1.2s</span>
+                    </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-5 border-t border-border bg-surface/20">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] font-bold text-slate-400 uppercase">System Health</span>
+                <div class="flex items-center gap-2">
+                    <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                    <span class="text-[10px] font-bold text-emerald-500">VECTORS READY</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 relative bg-surface overflow-hidden">
+        <!-- Logistics Container -->
+        <div id="logistics-view" class="w-full h-full absolute inset-0">
+            <div id="map"></div>
+            <div class="absolute top-6 left-6 z-[1000] flex flex-col gap-2 pointer-events-none">
+                <button onclick="toggleMapLayer()" class="panel-glass p-2.5 rounded-lg pointer-events-auto text-slate-300 hover:text-white transition-all flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-layer-group text-brand"></i>
+                    <span id="layer-text" class="text-[10px] font-bold uppercase">Satellite View</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- AIS Container -->
+        <div id="ais-view" class="w-full h-full view-hidden absolute inset-0 z-[1002] bg-surface">
+            <div id="ais-fallback-ui" class="ais-fallback absolute inset-0 z-0">
+                <i class="fa-solid fa-satellite-dish text-4xl mb-4 text-brand/50 animate-pulse"></i>
+                <h2 class="text-sm font-bold text-slate-200 mb-2">Live AIS Data Stream</h2>
+                <p class="text-xs text-slate-500 mb-6 max-w-xs">Connecting to global fleet servers. If the map doesn't load, your network may be blocking AIS telemetry providers.</p>
+                <div class="flex gap-3">
+                    <button onclick="reloadAIS()" class="px-6 py-2 bg-brand/10 border border-brand/30 text-brand text-[10px] font-bold uppercase rounded-lg hover:bg-brand/20 transition-all">Reload Stream</button>
+                    <a href="https://www.marinetraffic.com/en/ais/home/" target="_blank" class="px-6 py-2 bg-slate-800 border border-border text-slate-300 text-[10px] font-bold uppercase rounded-lg hover:bg-slate-700 transition-all">External Map</a>
+                </div>
+            </div>
+            <iframe id="ais-frame" 
+                class="w-full h-full border-none relative z-10"
+                allow="geolocation"
+                src="about:blank">
+            </iframe>
+        </div>
+
+        <!-- Clock HUD -->
+        <div class="absolute top-6 right-6 z-[1005] panel-glass px-4 py-2 rounded-lg text-right">
+            <div id="clock" class="text-xs font-mono font-bold text-brand leading-none mb-1">00:00:00 UTC</div>
+            <div class="text-[9px] text-slate-500 uppercase font-bold tracking-widest">Global Sync</div>
         </div>
     </main>
 
     <script>
-        const API_BASE_URL = "http://127.0.0.1:8000";
-        const OWM_API_KEY = "9fd714d642353381a1a5b8207137f8ed";
-
-        // Port Suggestions Data
-        const ports = [
-            { name: "Singapore (SIN)", lat: 1.29, lon: 103.85 },
-            { name: "Rotterdam (ROT)", lat: 51.92, lon: 4.47 },
-            { name: "Mumbai (BOM)", lat: 18.97, lon: 72.82 },
-            { name: "Shanghai (SHA)", lat: 31.23, lon: 121.47 },
-            { name: "Los Angeles (LAX)", lat: 33.74, lon: -118.24 },
-            { name: "New York (NYC)", lat: 40.71, lon: -74.00 },
-            { name: "Dubai (DXB)", lat: 25.20, lon: 55.27 },
-            { name: "Port Said (PSD)", lat: 31.26, lon: 32.30 },
-            { name: "Colombo (CMB)", lat: 6.94, lon: 79.84 },
-            { name: "Hamburg (HAM)", lat: 53.55, lon: 9.99 }
+        // Maritime Data
+        const PORTS = [
+            { id: 1, name: "Singapore PSA", lat: 1.29, lon: 103.85 },
+            { id: 2, name: "Rotterdam Maas", lat: 51.92, lon: 4.47 },
+            { id: 3, name: "Shanghai Yangshan", lat: 31.23, lon: 121.47 },
+            { id: 4, name: "Jebel Ali Dubai", lat: 25.01, lon: 55.06 },
+            { id: 5, name: "Suez Terminal", lat: 29.9, lon: 32.5 },
+            { id: 6, name: "Panama Canal", lat: 9.35, lon: -79.9 },
+            { id: 7, name: "Los Angeles", lat: 33.74, lon: -118.24 },
+            { id: 8, name: "Cape Town", lat: -33.92, lon: 18.42 },
+            { id: 9, name: "Mumbai JNPT", lat: 18.95, lon: 72.95 },
+            { id: 10, name: "Tokyo Bay", lat: 35.62, lon: 139.77 }
         ];
 
-        // UI State
-        let selectedStart = ports[8]; // Default Colombo
-        let selectedDest = ports[0];  // Default Singapore
+        const LAND_MASSES = [
+            { minLat: -35, maxLat: 37, minLon: -18, maxLon: 51 }, // Africa
+            { minLat: 15, maxLat: 72, minLon: -168, maxLon: -52 }, // N America
+            { minLat: -56, maxLat: 15, minLon: -82, maxLon: -34 }, // S America
+            { minLat: 35, maxLat: 72, minLon: -10, maxLon: 145 }, // Eurasia
+            { minLat: -44, maxLat: -10, minLon: 112, maxLon: 154 } // Australia
+        ];
 
-        // Initial Map Setup (Light Theme)
-        let map = L.map('map', {
-            zoomControl: false,
-            attributionControl: false,
-            maxBounds: [[-70, -180], [80, 180]]
-        }).setView([15.0, 65.0], 4);
+        let map, routeLayer, darkTile, satTile;
+        let isSatellite = false, simulationMode = false;
+        let disruptions = [], disruptionCircles = [];
+        let markers = { origin: null, destination: null };
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            subdomains: 'abcd'
-        }).addTo(map);
+        function init() {
+            const southWest = L.latLng(-85, -180);
+            const northEast = L.latLng(85, 180);
+            const bounds = L.latLngBounds(southWest, northEast);
 
-        const weatherLayers = {
-            wind: L.tileLayer(`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`),
-            clouds: L.tileLayer(`https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`)
-        };
-
-        let currentPathLine;
-        let environmentMarkers = [];
-
-        // Suggestion Logic
-        function setupSuggestions(inputId, suggestionId, onSelect) {
-            const input = document.getElementById(inputId);
-            const box = document.getElementById(suggestionId);
-
-            input.addEventListener('input', (e) => {
-                const val = e.target.value.toLowerCase();
-                box.innerHTML = '';
-                if (!val) { box.classList.add('hidden'); return; }
-
-                const filtered = ports.filter(p => p.name.toLowerCase().includes(val));
-                if (filtered.length > 0) {
-                    box.classList.remove('hidden');
-                    filtered.forEach(p => {
-                        const div = document.createElement('div');
-                        div.className = 'suggestion-item';
-                        div.innerText = p.name;
-                        div.onclick = () => {
-                            input.value = p.name;
-                            box.classList.add('hidden');
-                            onSelect(p);
-                        };
-                        box.appendChild(div);
-                    });
-                } else {
-                    box.classList.add('hidden');
-                }
-            });
-
-            // Close on click away
-            document.addEventListener('click', (e) => {
-                if (!input.contains(e.target) && !box.contains(e.target)) {
-                    box.classList.add('hidden');
-                }
-            });
-        }
-
-        setupSuggestions('start-input', 'start-suggestions', (p) => selectedStart = p);
-        setupSuggestions('dest-input', 'dest-suggestions', (p) => selectedDest = p);
-
-        async function fetchEnvironment() {
-            try {
-                const res = await fetch(`${API_BASE_URL}/environment-data`);
-                const data = await res.json();
-                environmentMarkers.forEach(m => map.removeLayer(m));
-                environmentMarkers = [];
-
-                data.disruptions.forEach(d => {
-                    const circle = L.circle([d.lat, d.lon], {
-                        radius: d.radius * 111000,
-                        color: '#f43f5e',
-                        fillColor: '#f43f5e',
-                        fillOpacity: 0.1,
-                        weight: 1,
-                        dashArray: '4, 4'
-                    }).addTo(map);
-                    circle.bindTooltip(`WEATHER HAZARD: ${d.name}`, { direction: 'top' });
-                    environmentMarkers.push(circle);
-                });
-
-                data.tide_stations.forEach(t => {
-                    const marker = L.circleMarker([t.lat, t.lon], {
-                        radius: 6,
-                        color: t.trend === 'rising' ? '#22c55e' : '#ef4444',
-                        fillOpacity: 0.9,
-                        weight: 2,
-                        fillColor: 'white'
-                    }).addTo(map);
-                    marker.bindPopup(`<b>${t.name}</b><br>Tide: ${t.level}`);
-                    environmentMarkers.push(marker);
-                });
-            } catch (e) { console.warn("Environment sync paused."); }
-        }
-
-        async function checkHealth() {
-            const dot = document.getElementById('global-status-dot');
-            const text = document.getElementById('global-status-text');
-            try {
-                const res = await fetch(`${API_BASE_URL}/environment-data`);
-                if (res.ok) {
-                    dot.className = "h-2 w-2 rounded-full bg-green-500 mr-2";
-                    text.innerText = "BRAIN ONLINE";
-                }
-            } catch (e) {
-                dot.className = "h-2 w-2 rounded-full bg-red-500 mr-2";
-                text.innerText = "BRAIN OFFLINE";
-            }
-        }
-
-        async function calculateRouteFromInputs() {
-            if (!selectedStart || !selectedDest) return;
+            map = L.map('map', { 
+                zoomControl: false, 
+                attributionControl: false,
+                maxBounds: bounds,
+                maxBoundsViscosity: 1.0,
+                minZoom: 2
+            }).setView([20, 0], 3);
             
-            try {
-                const response = await fetch(`${API_BASE_URL}/calculate-route`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        source: { lat: selectedStart.lat, lon: selectedStart.lon }, 
-                        destination: { lat: selectedDest.lat, lon: selectedDest.lon } 
-                    })
-                });
-                const data = await response.json();
-                
-                if (currentPathLine) map.removeLayer(currentPathLine);
+            darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', { noWrap: true, bounds }).addTo(map);
+            satTile = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { noWrap: true, bounds });
 
-                currentPathLine = L.polyline(data.path, {
-                    color: data.status === "OPTIMIZED" ? '#f59e0b' : '#3b82f6',
-                    weight: 4,
-                    opacity: 0.8,
-                    dashArray: data.status === "OPTIMIZED" ? '8, 8' : null
-                }).addTo(map);
+            const oSel = document.getElementById('origin-select');
+            const dSel = document.getElementById('dest-select');
+            PORTS.forEach(p => {
+                oSel.add(new Option(p.name, p.id));
+                dSel.add(new Option(p.name, p.id));
+            });
+            oSel.value = 1; dSel.value = 2;
 
-                map.flyToBounds(currentPathLine.getBounds(), { padding: [80, 80], duration: 1 });
+            document.getElementById('calc-btn').addEventListener('click', generateDynamicRoute);
+            map.on('click', handleMapClick);
 
-                document.getElementById('tel-waves').innerText = data.environmental_stats.avg_wave_height;
-                document.getElementById('tel-wind').innerText = data.environmental_stats.wind_speed;
-                const riskEl = document.getElementById('tel-risk');
-                riskEl.innerText = data.status === "OPTIMIZED" ? "ELEVATED" : "NOMINAL";
-                riskEl.className = data.status === "OPTIMIZED" ? "text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded uppercase" : "text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase";
-                
-                const alert = document.getElementById('alert-overlay');
-                if (data.status === "OPTIMIZED") alert.classList.remove('hidden');
-                else alert.classList.add('hidden');
-
-            } catch (e) {
-                console.error("Routing logic failed. Check if main.py is running.");
-            }
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            // Initial Route
+            generateDynamicRoute();
         }
 
-        function toggleLayer(type) {
-            const btn = document.getElementById(`btn-${type}`);
-            if (map.hasLayer(weatherLayers[type])) {
-                map.removeLayer(weatherLayers[type]);
-                btn.classList.remove('text-blue-600', 'bg-blue-50', 'border-blue-200');
+        function setView(mode) {
+            const lView = document.getElementById('logistics-view');
+            const aView = document.getElementById('ais-view');
+            const lCtrl = document.getElementById('logistics-controls');
+            const aInfo = document.getElementById('ais-info');
+            
+            const btnLog = document.getElementById('btn-logistics');
+            const btnAis = document.getElementById('btn-ais');
+
+            if (mode === 'ais') {
+                lView.classList.add('view-hidden');
+                aView.classList.remove('view-hidden');
+                lCtrl.classList.add('hidden');
+                aInfo.classList.remove('hidden');
+
+                // Button Styling
+                btnAis.classList.add('tab-active');
+                btnAis.classList.remove('text-slate-500');
+                btnLog.classList.remove('tab-active');
+                btnLog.classList.add('text-slate-500');
+                
+                reloadAIS();
             } else {
-                weatherLayers[type].addTo(map);
-                btn.classList.add('text-blue-600', 'bg-blue-50', 'border-blue-200');
+                aView.classList.add('view-hidden');
+                lView.classList.remove('view-hidden');
+                aInfo.classList.add('hidden');
+                lCtrl.classList.remove('hidden');
+
+                // Button Styling
+                btnLog.classList.add('tab-active');
+                btnLog.classList.remove('text-slate-500');
+                btnAis.classList.remove('tab-active');
+                btnAis.classList.add('text-slate-500');
+                
+                // Important: Redraw Leaflet after layout change
+                setTimeout(() => { map.invalidateSize(); }, 50);
             }
         }
 
-        // Init
-        document.getElementById('start-input').value = selectedStart.name;
-        document.getElementById('dest-input').value = selectedDest.name;
-        
-        setInterval(checkHealth, 5000);
-        setInterval(fetchEnvironment, 10000);
-        fetchEnvironment();
-        checkHealth();
+        function reloadAIS() {
+            const frame = document.getElementById('ais-frame');
+            // Using VesselFinder embed which is generally more iframe-friendly for simple previews
+            frame.src = "https://www.vesselfinder.com/aismap?zoom=3&lat=20&lon=0&width=100%25&height=100%25&names=false&mmsi=0&track=false&fleet=false&fleet_id=0&vcode=0&show_info=false&pcode=0&scale=false&allships=true";
+        }
+
+        function toggleMapLayer() {
+            isSatellite = !isSatellite;
+            const text = document.getElementById('layer-text');
+            if (isSatellite) {
+                map.removeLayer(darkTile);
+                satTile.addTo(map);
+                text.innerText = "Logistics View";
+            } else {
+                map.removeLayer(satTile);
+                darkTile.addTo(map);
+                text.innerText = "Satellite View";
+            }
+        }
+
+        function toggleSimulationMode() {
+            simulationMode = !simulationMode;
+            const indicator = document.getElementById('sim-indicator');
+            if (simulationMode) {
+                indicator.innerText = "CLICK MAP"; indicator.className = "text-[9px] font-bold text-amber-500 animate-pulse";
+                document.getElementById('map').classList.add('simulator-active');
+            } else {
+                indicator.innerText = "IDLE"; indicator.className = "text-[9px] font-bold text-slate-600";
+                document.getElementById('map').classList.remove('simulator-active');
+            }
+        }
+
+        function clearDisruptions() {
+            disruptions = [];
+            disruptionCircles.forEach(c => map.removeLayer(c));
+            disruptionCircles = [];
+            generateDynamicRoute();
+        }
+
+        function handleMapClick(e) {
+            if (!simulationMode) return;
+            const nm = parseFloat(document.getElementById('sim-radius').value) || 400;
+            const m = nm * 1852;
+            const circle = L.circle(e.latlng, { radius: m, color: '#f59e0b', weight: 1, fillColor: '#f59e0b', fillOpacity: 0.1, dashArray: '5,5' }).addTo(map);
+            disruptionCircles.push(circle);
+            disruptions.push({ lat: e.latlng.lat, lon: e.latlng.lng, radiusM: m });
+            toggleSimulationMode();
+            generateDynamicRoute();
+        }
+
+        function getFastDist(lat1, lon1, lat2, lon2) {
+            const dy = lat1 - lat2;
+            const dx = (lon1 - lon2) * Math.cos(lat1 * Math.PI / 180);
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function isPointObstructed(lat, lon, start, end) {
+            for (let d of disruptions) {
+                const dLat = lat - d.lat;
+                const dLon = (lon - d.lon) * Math.cos(lat * Math.PI / 180);
+                const distDegrees = Math.sqrt(dLat * dLat + dLon * dLon);
+                const radiusDegrees = (d.radiusM / 1852) / 60;
+                if (distDegrees < radiusDegrees) return true;
+            }
+
+            const startDist = getFastDist(lat, lon, start.lat, start.lon);
+            const endDist = getFastDist(lat, lon, end.lat, end.lon);
+            if (startDist < 2.0 || endDist < 2.0) return false;
+
+            for (let land of LAND_MASSES) {
+                if (lat > land.minLat && lat < land.maxLat && lon > land.minLon && lon < land.maxLon) return true;
+            }
+            return false;
+        }
+
+        function generateDynamicRoute() {
+            document.getElementById('loading').style.display = 'flex';
+            setTimeout(() => {
+                const originId = document.getElementById('origin-select').value;
+                const destId = document.getElementById('dest-select').value;
+                const origin = PORTS.find(p => p.id == originId);
+                const dest = PORTS.find(p => p.id == destId);
+                const path = findAStarPath(origin, dest);
+                renderPath(path, origin, dest);
+                document.getElementById('loading').style.display = 'none';
+            }, 100);
+        }
+
+        function findAStarPath(start, end) {
+            const gridRes = 3.0; 
+            const openSet = [{ 
+                lat: Math.round(start.lat / gridRes) * gridRes, 
+                lon: Math.round(start.lon / gridRes) * gridRes, 
+                g: 0, f: 0, parent: null 
+            }];
+            const closedSet = new Set();
+            const targetLat = Math.round(end.lat / gridRes) * gridRes;
+            const targetLon = Math.round(end.lon / gridRes) * gridRes;
+
+            let iterations = 0;
+            let bestNode = openSet[0];
+
+            while (openSet.length > 0 && iterations < 3000) {
+                iterations++;
+                let minIdx = 0;
+                for(let i = 1; i < openSet.length; i++) {
+                    if(openSet[i].f < openSet[minIdx].f) minIdx = i;
+                }
+                const current = openSet.splice(minIdx, 1)[0];
+                const key = `${current.lat.toFixed(1)},${current.lon.toFixed(1)}`;
+                if (closedSet.has(key)) continue;
+                closedSet.add(key);
+
+                const dToTarget = getFastDist(current.lat, current.lon, targetLat, targetLon);
+                if (dToTarget < gridRes) {
+                    bestNode = current;
+                    break;
+                }
+
+                if (dToTarget < getFastDist(bestNode.lat, bestNode.lon, targetLat, targetLon)) {
+                    bestNode = current;
+                }
+
+                for (let dl = -gridRes; dl <= gridRes; dl += gridRes) {
+                    for (let dlo = -gridRes; dlo <= gridRes; dlo += gridRes) {
+                        if (dl === 0 && dlo === 0) continue;
+                        let nLat = current.lat + dl;
+                        let nLon = current.lon + dlo;
+                        if (nLon > 180) nLon -= 360;
+                        if (nLon < -180) nLon += 360;
+                        if (nLat > 80 || nLat < -70) continue;
+                        if (isPointObstructed(nLat, nLon, start, end)) continue;
+                        const g = current.g + (Math.abs(dl) + Math.abs(dlo));
+                        const h = getFastDist(nLat, nLon, targetLat, targetLon);
+                        openSet.push({ lat: nLat, lon: nLon, g: g, f: g + h, parent: current });
+                    }
+                }
+            }
+            let res = [[end.lat, end.lon]];
+            let temp = bestNode;
+            while (temp) { res.push([temp.lat, temp.lon]); temp = temp.parent; }
+            res.push([start.lat, start.lon]);
+            return res.reverse();
+        }
+
+        function renderPath(path, origin, dest) {
+            if (routeLayer) map.removeLayer(routeLayer);
+            if (markers.origin) map.removeLayer(markers.origin);
+            if (markers.destination) map.removeLayer(markers.destination);
+            
+            routeLayer = L.polyline(path, { color: '#4f46e5', weight: 3, opacity: 0.8, className: 'route-path' }).addTo(map);
+            markers.origin = L.circleMarker([origin.lat, origin.lon], { radius: 5, fillColor: '#10b981', color: '#10b981', weight: 8, opacity: 0.1, fillOpacity: 1 }).addTo(map);
+            markers.destination = L.circleMarker([dest.lat, dest.lon], { radius: 5, fillColor: '#4f46e5', color: '#4f46e5', weight: 8, opacity: 0.1, fillOpacity: 1 }).addTo(map);
+            
+            map.fitBounds(routeLayer.getBounds(), { padding: [80, 80] });
+            
+            const totalMeters = path.reduce((acc, curr, idx) => {
+                if (idx === 0) return 0;
+                return acc + L.latLng(path[idx-1]).distanceTo(L.latLng(curr));
+            }, 0);
+            
+            const nm = Math.round(totalMeters / 1852);
+            document.getElementById('metrics-panel').classList.remove('hidden');
+            document.getElementById('metric-dist').innerText = nm.toLocaleString() + " NM";
+            document.getElementById('metric-time').innerText = Math.round(nm / 22) + " HRS";
+        }
+
+        function updateClock() { 
+            document.getElementById('clock').innerText = new Date().toISOString().split('T')[1].split('.')[0] + " UTC"; 
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>
